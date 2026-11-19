@@ -129,7 +129,7 @@ async function sendMessage(text, voiceReply = false) {
       data = JSON.parse(rawText);
     } catch (error) {
       throw new Error(
-        "Sunucu JSON yerine farklı bir cevap gönderdi: " +
+        "Sunucu JSON yerine farklı cevap gönderdi: " +
         rawText.substring(0, 150)
       );
     }
@@ -172,15 +172,22 @@ async function sendMessage(text, voiceReply = false) {
   }
 }
 
+// SESLİ OKUMA
+
 function speak(text) {
   if (!("speechSynthesis" in window)) {
     setVoiceStatus("Ses desteklenmiyor", "Tarayıcını kontrol et", "");
     return;
   }
 
+  // MEBRU AI isminin harf harf okunmasını önle.
+  const spokenText = text
+    .replace(/\bMEBRU\s*AI\b/gi, "Mebru Ay")
+    .replace(/\bMEBRU\b/gi, "Mebru");
+
   window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(text);
+  const utterance = new SpeechSynthesisUtterance(spokenText);
 
   utterance.lang = "tr-TR";
   utterance.rate = 1;
@@ -193,11 +200,15 @@ function speak(text) {
   );
 
   utterance.onend = () => {
-    if (voiceMode) startListening();
+    if (voiceMode) {
+      startListening();
+    }
   };
 
   utterance.onerror = () => {
-    if (voiceMode) startListening();
+    if (voiceMode) {
+      startListening();
+    }
   };
 
   window.speechSynthesis.speak(utterance);
@@ -423,4 +434,3 @@ voiceEndBtn.addEventListener("click", closeVoice);
 
 renderHistory();
 renderKnowledge();
-      
