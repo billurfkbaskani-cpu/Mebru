@@ -10,6 +10,7 @@
 </head>
 <body>
   <div id="app">
+
     <header class="header">
       <div class="logo">M</div>
       <div class="brand">
@@ -37,10 +38,24 @@
         <textarea id="messageInput"
           placeholder="MEBRU'ya bir şey sor..."
           rows="1"></textarea>
-        <button id="voiceBtn" title="Sesli konuş">🎙</button>
+
         <button id="sendBtn" title="Gönder">➤</button>
+
+        <button id="voiceBtn" title="Sesli sohbet">
+          <svg viewBox="0 0 24 24" width="24" height="24"
+            fill="none" stroke="white" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+            <path d="M5 10v2a7 7 0 0 0 14 0v-2"></path>
+            <path d="M12 19v3"></path>
+            <path d="M8 22h8"></path>
+          </svg>
+        </button>
       </div>
-      <p class="disclaimer">MEBRU AI hata yapabilir. Önemli bilgileri kontrol et.</p>
+
+      <p class="disclaimer">
+        MEBRU AI hata yapabilir. Önemli bilgileri kontrol et.
+      </p>
     </main>
 
     <main id="learnPage" class="page hidden">
@@ -60,6 +75,45 @@
         <div id="knowledgeList"></div>
       </div>
     </main>
+
+    <!-- SESLİ SOHBET EKRANI -->
+    <section id="voicePage" class="voice-page hidden">
+
+      <div class="voice-header">
+        <div class="voice-brand">
+          <div class="voice-small-logo">M</div>
+          <span>MEBRU AI</span>
+        </div>
+
+        <button id="closeVoiceBtn" class="close-voice">
+          ✕
+        </button>
+      </div>
+
+      <div class="voice-center">
+
+        <div id="voiceOrb" class="voice-orb">
+          <div class="orb-inner"></div>
+        </div>
+
+        <h2 id="voiceStatus">Seni dinliyorum</h2>
+        <p id="voiceSubtitle">Konuşmaya başlayabilirsin</p>
+
+      </div>
+
+      <div class="voice-controls">
+        <button id="voiceEndBtn" class="voice-end-btn">
+          <svg viewBox="0 0 24 24" width="27" height="27"
+            fill="white">
+            <rect x="5" y="5" width="14" height="14" rx="3"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="voice-footer">MEBRU AI sesli sohbet</p>
+
+    </section>
+
   </div>
 
   <script src="app.js"></script>
