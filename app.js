@@ -1,13 +1,11 @@
 
 const API_URL = "https://mebru-1.onrender.com/api/chat";
 
+// HTML ELEMENTLERİ
 const chatArea = document.getElementById("chatArea");
 const messageInput = document.getElementById("messageInput");
 const sendBtn = document.getElementById("sendBtn");
 const voiceBtn = document.getElementById("voiceBtn");
-
-const chatPage = document.getElementById("chatPage");
-const learnPage = document.getElementById("learnPage");
 
 const voicePage = document.getElementById("voicePage");
 const voiceOrb = document.getElementById("voiceOrb");
@@ -17,34 +15,118 @@ const voiceSubtitle = document.getElementById("voiceSubtitle");
 const closeVoiceBtn = document.getElementById("closeVoiceBtn");
 const voiceEndBtn = document.getElementById("voiceEndBtn");
 
-const knowledgeInput = document.getElementById("knowledgeInput");
-const saveKnowledge = document.getElementById("saveKnowledge");
-const knowledgeList = document.getElementById("knowledgeList");
+const sidebar = document.getElementById("sidebar");
+const menuBtn = document.getElementById("menuBtn");
+const closeSidebarBtn = document.getElementById("closeSidebarBtn");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
+const newChatBtn = document.getElementById("newChatBtn");
+const chatHistory = document.getElementById("chatHistory");
 
-let history = JSON.parse(localStorage.getItem("mebru_history") || "[]");
-let knowledge = JSON.parse(localStorage.getItem("mebru_knowledge") || "[]");
+// ESKİ BİLGİLERİ KORUMA
+let knowledge = JSON.parse(
+  localStorage.getItem("mebru_knowledge") || "[]"
+);
+
+// SOHBETLER
+let chats = JSON.parse(
+  localStorage.getItem("mebru_chats") || "null"
+);
+
+let history = [];
+let currentChatId = null;
+
+// Eski sürümdeki sohbetleri yeni sisteme aktar.
+if (!Array.isArray(chats)) {
+  const oldHistory = JSON.parse(
+    localStorage.getItem("mebru_history") || "[]"
+  );
+
+  chats = [];
+
+  if (oldHistory.length > 0) {
+    chats.push({
+      id: Date.now(),
+      title: "Eski sohbet",
+      messages: oldHistory,
+      updatedAt: Date.now()
+    });
+  }
+}
+
+if (chats.length > 0) {
+  chats.sort((a, b) => b.updatedAt - a.updatedAt);
+  currentChatId = chats[0].id;
+  history = [...chats[0].messages];
+}
 
 let recognition = null;
 let busy = false;
 let voiceMode = false;
 
-function saveHistory() {
-  localStorage.setItem("mebru_history", JSON.stringify(history));
+// KAYDETME
+function saveChats() {
+  localStorage.setItem("mebru_chats", JSON.stringify(chats));
 }
 
 function saveKnowledgeData() {
-  localStorage.setItem("mebru_knowledge", JSON.stringify(knowledge));
+  localStorage.setItem(
+    "mebru_knowledge",
+    JSON.stringify(knowledge)
+  );
 }
 
+// SOHBET BAŞLIĞI
+function createChatTitle(text) {
+  const title = text.trim().replace(/\s+/g, " ");
+  return title.length > 28
+    ? title.substring(0, 28) + "..."
+    : title;
+}
+
+// SOHBETİ KAYDET
+function saveHistory() {
+  if (history.length === 0) return;
+
+  let chat = chats.find(item => item.id === currentChatId);
+
+  if (!chat) {
+    currentChatId = Date.now();
+
+    chat = {
+      id: currentChatId,
+      title: createChatTitle(
+        history.find(item => item.role === "user")?.content || "Yeni sohbet"
+      ),
+      messages: [],
+      updatedAt: Date.now()
+    };
+
+    chats.unshift(chat);
+  }
+
+  chat.messages = [...history];
+  chat.updatedAt = Date.now();
+
+  chats.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  saveChats();
+  renderChatHistory();
+}
+
+// MESAJ EKLE
 function addMessage(text, type) {
   const div = document.createElement("div");
+
   div.className = "message " + type;
   div.textContent = text;
+
   chatArea.appendChild(div);
   chatArea.scrollTop = chatArea.scrollHeight;
+
   return div;
 }
 
+// KARŞILAMA EKRANI
 function showWelcome() {
   chatArea.innerHTML = `
     <div class="welcome">
@@ -55,6 +137,7 @@ function showWelcome() {
   `;
 }
 
+// SOHBETİ GÖSTER
 function renderHistory() {
   chatArea.innerHTML = "";
 
@@ -64,10 +147,97 @@ function renderHistory() {
   }
 
   history.forEach(item => {
-    addMessage(item.content, item.role === "user" ? "user" : "ai");
+    addMessage(
+      item.content,
+      item.role === "user" ? "user" : "ai"
+    );
   });
 }
 
+// SOL MENÜDE SOHBETLERİ GÖSTER
+function renderChatHistory() {
+  chatHistory.innerHTML = "";
+
+  if (chats.length === 0) {
+    chatHistory.innerHTML =
+      '<p class="empty-history">Henüz sohbet yok</p>';
+    return;
+  }
+
+  chats.forEach(chat => {
+    const item = document.createElement("button");
+
+    item.className = "history-item";
+
+    if (chat.id === currentChatId) {
+      item.classList.add("selected");
+    }
+
+    item.textContent = chat.title;
+    item.dataset.id = chat.id;
+
+    item.addEventListener("click", () => {
+      openChat(chat.id);
+    });
+
+    chatHistory.appendChild(item);
+  });
+}
+
+// SOHBET AÇ
+function openChat(id) {
+  const chat = chats.find(item => item.id === id);
+
+  if (!chat) return;
+
+  currentChatId = chat.id;
+  history = [...chat.messages];
+
+  renderHistory();
+  renderChatHistory();
+  closeSidebar();
+}
+
+// YENİ SOHBET
+function newChat() {
+  if (busy) return;
+
+  currentChatId = null;
+  history = [];
+
+  renderHistory();
+  renderChatHistory();
+
+  messageInput.value = "";
+  messageInput.style.height = "46px";
+
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
+  closeSidebar();
+}
+
+// MENÜ AÇMA VE KAPATMA
+function openSidebar() {
+  sidebar.classList.add("open");
+  sidebarOverlay.classList.add("show");
+}
+
+function closeSidebar() {
+  sidebar.classList.remove("open");
+  sidebarOverlay.classList.remove("show");
+}
+
+menuBtn.addEventListener("click", openSidebar);
+
+closeSidebarBtn.addEventListener("click", closeSidebar);
+
+sidebarOverlay.addEventListener("click", closeSidebar);
+
+newChatBtn.addEventListener("click", newChat);
+
+// SES DURUMU
 function setVoiceStatus(status, subtitle, animation) {
   voiceStatus.textContent = status;
   voiceSubtitle.textContent = subtitle;
@@ -79,6 +249,7 @@ function setVoiceStatus(status, subtitle, animation) {
   }
 }
 
+// MESAJ GÖNDER
 async function sendMessage(text, voiceReply = false) {
   text = text.trim();
 
@@ -88,7 +259,7 @@ async function sendMessage(text, voiceReply = false) {
   sendBtn.disabled = true;
 
   messageInput.value = "";
-  messageInput.style.height = "48px";
+  messageInput.style.height = "46px";
 
   if (history.length === 0) {
     chatArea.innerHTML = "";
@@ -100,12 +271,20 @@ async function sendMessage(text, voiceReply = false) {
   });
 
   addMessage(text, "user");
+
   saveHistory();
 
-  const loading = addMessage("MEBRU düşünüyor...", "ai");
+  const loading = addMessage(
+    "MEBRU düşünüyor...",
+    "ai"
+  );
 
   if (voiceReply) {
-    setVoiceStatus("MEBRU düşünüyor", "Cevabını hazırlıyor...", "");
+    setVoiceStatus(
+      "MEBRU düşünüyor",
+      "Cevabını hazırlıyor...",
+      ""
+    );
   }
 
   try {
@@ -129,13 +308,15 @@ async function sendMessage(text, voiceReply = false) {
       data = JSON.parse(rawText);
     } catch (error) {
       throw new Error(
-        "Sunucu JSON yerine farklı cevap gönderdi: " +
+        "Sunucu geçerli cevap vermedi: " +
         rawText.substring(0, 150)
       );
     }
 
     if (!response.ok) {
-      throw new Error(data.error || "Sunucu hatası: " + response.status);
+      throw new Error(
+        data.error || "Sunucu hatası: " + response.status
+      );
     }
 
     const reply = data.reply || "Cevap oluşturulamadı.";
@@ -157,7 +338,11 @@ async function sendMessage(text, voiceReply = false) {
     loading.textContent = "Hata: " + error.message;
 
     if (voiceReply && voiceMode) {
-      setVoiceStatus("Bir hata oluştu", "Tekrar deneyebilirsin", "");
+      setVoiceStatus(
+        "Bir hata oluştu",
+        "Tekrar deneyebilirsin",
+        ""
+      );
     }
 
   } finally {
@@ -165,24 +350,29 @@ async function sendMessage(text, voiceReply = false) {
     sendBtn.disabled = false;
     chatArea.scrollTop = chatArea.scrollHeight;
 
-    if (voiceReply && voiceMode &&
-        !window.speechSynthesis?.speaking) {
+    if (
+      voiceReply &&
+      voiceMode &&
+      !window.speechSynthesis?.speaking
+    ) {
       startListening();
     }
   }
 }
 
 // SESLİ OKUMA
-
 function speak(text) {
   if (!("speechSynthesis" in window)) {
-    setVoiceStatus("Ses desteklenmiyor", "Tarayıcını kontrol et", "");
+    setVoiceStatus(
+      "Ses desteklenmiyor",
+      "Tarayıcını kontrol et",
+      ""
+    );
     return;
   }
 
-  // MEBRU AI isminin harf harf okunmasını önle.
   const spokenText = text
-    .replace(/\bMEBRU\s*AI\b/gi, "Mebru Ay")
+    .replace(/\bMEBRU\s*AI\b/gi, "Mebru ey-ay")
     .replace(/\bMEBRU\b/gi, "Mebru");
 
   window.speechSynthesis.cancel();
@@ -190,8 +380,8 @@ function speak(text) {
   const utterance = new SpeechSynthesisUtterance(spokenText);
 
   utterance.lang = "tr-TR";
-  utterance.rate = 1;
-  utterance.pitch = 1;
+  utterance.rate = 0.95;
+  utterance.pitch = 1.05;
 
   setVoiceStatus(
     "MEBRU konuşuyor",
@@ -200,22 +390,17 @@ function speak(text) {
   );
 
   utterance.onend = () => {
-    if (voiceMode) {
-      startListening();
-    }
+    if (voiceMode) startListening();
   };
 
   utterance.onerror = () => {
-    if (voiceMode) {
-      startListening();
-    }
+    if (voiceMode) startListening();
   };
 
   window.speechSynthesis.speak(utterance);
 }
 
 // NORMAL SOHBET
-
 sendBtn.addEventListener("click", () => {
   sendMessage(messageInput.value, false);
 });
@@ -228,102 +413,22 @@ messageInput.addEventListener("keydown", event => {
 });
 
 messageInput.addEventListener("input", () => {
-  messageInput.style.height = "48px";
+  messageInput.style.height = "46px";
+
   messageInput.style.height =
-    Math.min(messageInput.scrollHeight, 160) + "px";
+    Math.min(messageInput.scrollHeight, 150) + "px";
 });
 
-// YENİ SOHBET
-
-document.getElementById("newChatBtn").addEventListener("click", () => {
-  history = [];
-  saveHistory();
-  renderHistory();
-
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-  }
-});
-
-// SEKME DEĞİŞTİRME
-
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t =>
-      t.classList.remove("active")
-    );
-
-    tab.classList.add("active");
-
-    const page = tab.dataset.page;
-
-    chatPage.classList.toggle("hidden", page !== "chat");
-    learnPage.classList.toggle("hidden", page !== "learn");
-
-    if (page === "learn") {
-      renderKnowledge();
-    }
-  });
-});
-
-// BİLGİ MERKEZİ
-
-saveKnowledge.addEventListener("click", () => {
-  const text = knowledgeInput.value.trim();
-
-  if (!text) return;
-
-  knowledge.unshift({
-    id: Date.now(),
-    text
-  });
-
-  saveKnowledgeData();
-  knowledgeInput.value = "";
-  renderKnowledge();
-
-  alert("Bilgi kaydedildi.");
-});
-
-function renderKnowledge() {
-  knowledgeList.innerHTML = "";
-
-  if (knowledge.length === 0) {
-    knowledgeList.textContent = "Henüz kaydedilen bilgi yok.";
-    return;
-  }
-
-  knowledge.forEach(item => {
-    const div = document.createElement("div");
-    div.className = "knowledge-item";
-
-    const content = document.createElement("div");
-    content.textContent = item.text;
-
-    const remove = document.createElement("button");
-    remove.textContent = "Sil";
-    remove.className = "delete-knowledge";
-
-    remove.addEventListener("click", () => {
-      knowledge = knowledge.filter(k => k.id !== item.id);
-      saveKnowledgeData();
-      renderKnowledge();
-    });
-
-    div.append(content, remove);
-    knowledgeList.appendChild(div);
-  });
-}
-
-// SESLİ SOHBET
-
+// SESLİ SOHBETİ BAŞLAT
 function startVoice() {
   const SpeechRecognition =
     window.SpeechRecognition ||
     window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    alert("Ses tanıma desteklenmiyor. Chrome kullanmayı deneyebilirsin.");
+    alert(
+      "Ses tanıma desteklenmiyor. Chrome kullanmayı deneyebilirsin."
+    );
     return;
   }
 
@@ -341,15 +446,23 @@ function startVoice() {
   startListening();
 }
 
+// SESİ DİNLE
 function startListening() {
   const SpeechRecognition =
     window.SpeechRecognition ||
     window.webkitSpeechRecognition;
 
-  if (!SpeechRecognition || !voiceMode || busy || recognition) return;
+  if (
+    !SpeechRecognition ||
+    !voiceMode ||
+    busy ||
+    recognition
+  ) return;
 
-  if ("speechSynthesis" in window &&
-      window.speechSynthesis.speaking) return;
+  if (
+    "speechSynthesis" in window &&
+    window.speechSynthesis.speaking
+  ) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = "tr-TR";
@@ -373,11 +486,16 @@ function startListening() {
   };
 
   currentRecognition.onerror = event => {
-    if (event.error === "not-allowed" ||
-        event.error === "service-not-allowed") {
+    if (
+      event.error === "not-allowed" ||
+      event.error === "service-not-allowed"
+    ) {
       alert("Mikrofon izni vermen gerekiyor.");
       closeVoice();
-    } else if (event.error !== "no-speech" && voiceMode) {
+    } else if (
+      event.error !== "no-speech" &&
+      voiceMode
+    ) {
       setVoiceStatus(
         "Dinleme hatası",
         "Tekrar konuşabilirsin",
@@ -391,11 +509,14 @@ function startListening() {
       recognition = null;
     }
 
-    if (voiceMode && !busy &&
-        !window.speechSynthesis?.speaking) {
+    if (
+      voiceMode &&
+      !busy &&
+      !window.speechSynthesis?.speaking
+    ) {
       setTimeout(() => {
         startListening();
-      }, 400);
+      }, 500);
     }
   };
 
@@ -406,6 +527,7 @@ function startListening() {
   }
 }
 
+// SESLİ SOHBETİ KAPAT
 function closeVoice() {
   voiceMode = false;
 
@@ -431,6 +553,6 @@ closeVoiceBtn.addEventListener("click", closeVoice);
 voiceEndBtn.addEventListener("click", closeVoice);
 
 // BAŞLANGIÇ
-
 renderHistory();
-renderKnowledge();
+renderChatHistory();
+  
