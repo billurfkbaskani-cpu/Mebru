@@ -1,4 +1,6 @@
 
+const API_URL = "https://mebru-1.onrender.com/api/chat";
+
 const chatArea = document.getElementById("chatArea");
 const messageInput = document.getElementById("messageInput");
 const sendBtn = document.getElementById("sendBtn");
@@ -6,6 +8,14 @@ const voiceBtn = document.getElementById("voiceBtn");
 
 const chatPage = document.getElementById("chatPage");
 const learnPage = document.getElementById("learnPage");
+
+const voicePage = document.getElementById("voicePage");
+const voiceOrb = document.getElementById("voiceOrb");
+const voiceStatus = document.getElementById("voiceStatus");
+const voiceSubtitle = document.getElementById("voiceSubtitle");
+
+const closeVoiceBtn = document.getElementById("closeVoiceBtn");
+const voiceEndBtn = document.getElementById("voiceEndBtn");
 
 const knowledgeInput = document.getElementById("knowledgeInput");
 const saveKnowledge = document.getElementById("saveKnowledge");
@@ -16,6 +26,7 @@ let knowledge = JSON.parse(localStorage.getItem("mebru_knowledge") || "[]");
 
 let recognition = null;
 let busy = false;
+let voiceMode = false;
 
 function saveHistory() {
   localStorage.setItem("mebru_history", JSON.stringify(history));
@@ -57,7 +68,18 @@ function renderHistory() {
   });
 }
 
-async function sendMessage(text) {
+function setVoiceStatus(status, subtitle, animation) {
+  voiceStatus.textContent = status;
+  voiceSubtitle.textContent = subtitle;
+
+  voiceOrb.classList.remove("listening", "speaking");
+
+  if (animation) {
+    voiceOrb.classList.add(animation);
+  }
+}
+
+async function sendMessage(text, voiceReply = false) {
   text = text.trim();
 
   if (!text || busy) return;
@@ -72,14 +94,22 @@ async function sendMessage(text) {
     chatArea.innerHTML = "";
   }
 
-  history.push({ role: "user", content: text });
+  history.push({
+    role: "user",
+    content: text
+  });
+
   addMessage(text, "user");
   saveHistory();
 
   const loading = addMessage("MEBRU düşünüyor...", "ai");
 
+  if (voiceReply) {
+    setVoiceStatus("MEBRU düşünüyor", "Cevabını hazırlıyor...", "");
+  }
+
   try {
-    const response = await fetch("/api/chat", {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -91,52 +121,98 @@ async function sendMessage(text) {
       })
     });
 
-    const data = await response.json();
+    const rawText = await response.text();
 
-    if (!response.ok) {
-      throw new Error(data.error || "Sunucu hatası");
+    let data;
+
+    try {
+      data = JSON.parse(rawText);
+    } catch (error) {
+      throw new Error(
+        "Sunucu JSON yerine farklı bir cevap gönderdi: " +
+        rawText.substring(0, 150)
+      );
     }
 
-    loading.textContent = data.reply;
+    if (!response.ok) {
+      throw new Error(data.error || "Sunucu hatası: " + response.status);
+    }
+
+    const reply = data.reply || "Cevap oluşturulamadı.";
+
+    loading.textContent = reply;
 
     history.push({
       role: "assistant",
-      content: data.reply
+      content: reply
     });
 
     saveHistory();
-    speak(data.reply);
+
+    if (voiceReply && voiceMode) {
+      speak(reply);
+    }
 
   } catch (error) {
     loading.textContent = "Hata: " + error.message;
+
+    if (voiceReply && voiceMode) {
+      setVoiceStatus("Bir hata oluştu", "Tekrar deneyebilirsin", "");
+    }
+
   } finally {
     busy = false;
     sendBtn.disabled = false;
     chatArea.scrollTop = chatArea.scrollHeight;
+
+    if (voiceReply && voiceMode &&
+        !window.speechSynthesis?.speaking) {
+      startListening();
+    }
   }
 }
 
 function speak(text) {
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window)) {
+    setVoiceStatus("Ses desteklenmiyor", "Tarayıcını kontrol et", "");
+    return;
+  }
 
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
+
   utterance.lang = "tr-TR";
   utterance.rate = 1;
   utterance.pitch = 1;
 
+  setVoiceStatus(
+    "MEBRU konuşuyor",
+    "Cevabını dinle",
+    "speaking"
+  );
+
+  utterance.onend = () => {
+    if (voiceMode) startListening();
+  };
+
+  utterance.onerror = () => {
+    if (voiceMode) startListening();
+  };
+
   window.speechSynthesis.speak(utterance);
 }
 
+// NORMAL SOHBET
+
 sendBtn.addEventListener("click", () => {
-  sendMessage(messageInput.value);
+  sendMessage(messageInput.value, false);
 });
 
 messageInput.addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    sendMessage(messageInput.value);
+    sendMessage(messageInput.value, false);
   }
 });
 
@@ -145,6 +221,8 @@ messageInput.addEventListener("input", () => {
   messageInput.style.height =
     Math.min(messageInput.scrollHeight, 160) + "px";
 });
+
+// YENİ SOHBET
 
 document.getElementById("newChatBtn").addEventListener("click", () => {
   history = [];
@@ -155,6 +233,8 @@ document.getElementById("newChatBtn").addEventListener("click", () => {
     window.speechSynthesis.cancel();
   }
 });
+
+// SEKME DEĞİŞTİRME
 
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -169,9 +249,13 @@ document.querySelectorAll(".tab").forEach(tab => {
     chatPage.classList.toggle("hidden", page !== "chat");
     learnPage.classList.toggle("hidden", page !== "learn");
 
-    if (page === "learn") renderKnowledge();
+    if (page === "learn") {
+      renderKnowledge();
+    }
   });
 });
+
+// BİLGİ MERKEZİ
 
 saveKnowledge.addEventListener("click", () => {
   const text = knowledgeInput.value.trim();
@@ -220,50 +304,123 @@ function renderKnowledge() {
   });
 }
 
+// SESLİ SOHBET
+
 function startVoice() {
   const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
     alert("Ses tanıma desteklenmiyor. Chrome kullanmayı deneyebilirsin.");
     return;
   }
 
-  if (recognition) {
-    recognition.stop();
-    return;
-  }
+  if (voiceMode) return;
+
+  voiceMode = true;
+  voicePage.classList.remove("hidden");
+
+  setVoiceStatus(
+    "Seni dinliyorum",
+    "Konuşmaya başlayabilirsin",
+    "listening"
+  );
+
+  startListening();
+}
+
+function startListening() {
+  const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition || !voiceMode || busy || recognition) return;
+
+  if ("speechSynthesis" in window &&
+      window.speechSynthesis.speaking) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = "tr-TR";
   recognition.continuous = false;
   recognition.interimResults = false;
 
-  voiceBtn.classList.add("listening");
-  voiceBtn.textContent = "🔴";
+  const currentRecognition = recognition;
 
-  recognition.onresult = event => {
+  setVoiceStatus(
+    "Seni dinliyorum",
+    "Konuşabilirsin",
+    "listening"
+  );
+
+  currentRecognition.onresult = event => {
     const text = event.results[0][0].transcript;
-    messageInput.value = text;
-    sendMessage(text);
-  };
 
-  recognition.onerror = event => {
-    if (event.error !== "no-speech") {
-      alert("Ses tanıma hatası: " + event.error);
+    if (text.trim()) {
+      sendMessage(text, true);
     }
   };
 
-  recognition.onend = () => {
-    recognition = null;
-    voiceBtn.classList.remove("listening");
-    voiceBtn.textContent = "🎙";
+  currentRecognition.onerror = event => {
+    if (event.error === "not-allowed" ||
+        event.error === "service-not-allowed") {
+      alert("Mikrofon izni vermen gerekiyor.");
+      closeVoice();
+    } else if (event.error !== "no-speech" && voiceMode) {
+      setVoiceStatus(
+        "Dinleme hatası",
+        "Tekrar konuşabilirsin",
+        ""
+      );
+    }
   };
 
-  recognition.start();
+  currentRecognition.onend = () => {
+    if (recognition === currentRecognition) {
+      recognition = null;
+    }
+
+    if (voiceMode && !busy &&
+        !window.speechSynthesis?.speaking) {
+      setTimeout(() => {
+        startListening();
+      }, 400);
+    }
+  };
+
+  try {
+    currentRecognition.start();
+  } catch (error) {
+    recognition = null;
+  }
+}
+
+function closeVoice() {
+  voiceMode = false;
+
+  if (recognition) {
+    const oldRecognition = recognition;
+    recognition = null;
+
+    try {
+      oldRecognition.stop();
+    } catch (error) {}
+  }
+
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
+  voiceOrb.classList.remove("listening", "speaking");
+  voicePage.classList.add("hidden");
 }
 
 voiceBtn.addEventListener("click", startVoice);
+closeVoiceBtn.addEventListener("click", closeVoice);
+voiceEndBtn.addEventListener("click", closeVoice);
+
+// BAŞLANGIÇ
 
 renderHistory();
 renderKnowledge();
+      
