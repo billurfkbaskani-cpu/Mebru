@@ -8,32 +8,32 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
 const SYSTEM_PROMPT = `
 Sen MEBRU AI'sın. Türkçe konuşan, yardımcı, bilgili ve nazik bir yapay zekâ asistanısın.
 
 Kurallar:
-- Kullanıcıya Türkçe cevap ver.
+- Türkçe cevap ver.
 - Açık, anlaşılır ve doğru bilgiler sun.
 - Bilmediğin konularda uydurma bilgi verme.
 - Matematik sorularını adım adım açıkla.
 - Kullanıcının seviyesine uygun anlatım yap.
 - Gereksiz uzun cevaplar verme.
 - Sana MEBRU'yu kimin icat ettiği veya geliştirdiği sorulursa:
-  "Beni Enes Barutcu icat etti ve geliştirdi. Ben MEBRU AI'yım." diye cevap ver.
+"Beni Enes Barutcu icat etti ve geliştirdi. Ben MEBRU AI'yım." diye cevap ver.
 `;
 
 app.get("/", (req, res) => {
-  res.send("MEBRU AI OpenAI sistemi çalışıyor!");
+  res.send("MEBRU AI sunucusu çalışıyor!");
 });
 
 app.post("/api/chat", async (req, res) => {
   try {
-    if (!OPENAI_API_KEY) {
+    if (!GROQ_API_KEY) {
       return res.status(500).json({
-        error: "OPENAI_API_KEY Render ayarlarında bulunamadı."
+        error: "GROQ_API_KEY bulunamadı."
       });
     }
 
@@ -55,9 +55,7 @@ app.post("/api/chat", async (req, res) => {
       {
         role: "system",
         content: SYSTEM_PROMPT +
-          (knowledgeText
-            ? "\n\nEk bilgiler:\n" + knowledgeText
-            : "")
+          (knowledgeText ? "\n\nEk bilgiler:\n" + knowledgeText : "")
       }
     ];
 
@@ -82,15 +80,15 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENAI_API_KEY}`
+          "Authorization": `Bearer ${GROQ_API_KEY}`
         },
         body: JSON.stringify({
-          model: OPENAI_MODEL,
+          model: GROQ_MODEL,
           messages: messages
         })
       }
@@ -99,10 +97,10 @@ app.post("/api/chat", async (req, res) => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("OpenAI API hatası:", data.error?.message);
+      console.error("Groq API hatası:", data.error?.message);
 
       return res.status(response.status).json({
-        error: data.error?.message || "OpenAI API isteği başarısız oldu."
+        error: data.error?.message || "Groq API isteği başarısız."
       });
     }
 
@@ -110,13 +108,11 @@ app.post("/api/chat", async (req, res) => {
 
     if (!reply) {
       return res.status(500).json({
-        error: "OpenAI boş cevap döndürdü."
+        error: "Groq boş cevap döndürdü."
       });
     }
 
-    res.json({
-      reply: reply
-    });
+    res.json({ reply });
 
   } catch (error) {
     console.error("Sunucu hatası:", error.message);
